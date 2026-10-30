@@ -1,4 +1,4 @@
-Status: claimed
+Status: resolved
 Type: task
 Blocked by: 07, 08, 11, 12
 
@@ -20,3 +20,7 @@ Spec: ../spec.md
 - Tests: tests/sync-controller.test.ts (overlap collapse, failure recovery, debounce, self-write window, throttled saver).
 - Verified live on macOS (obsidian-cli + CDP): startup ran the full pipeline and stopped at first-sync confirmation (2 uploads planned, nothing written); 4 concurrent triggers → 2 sequential runs, max 1 active; edit debounce fired once after the quiet period; interval fired.
 - Remaining before resolve: the resume trigger (not simulated) and all triggers on iOS. Needs a new BRAT release; best done after ticket 14, since first sync needs the confirmation dialog.
+
+## Answer
+
+Shipped in 0.2.0. Startup, manual, interval and edit triggers and overlap prevention verified live on macOS; on iPhone, first sync via BRAT 0.2.0 succeeded. Drive check after both devices synced: one ObsidianSync/namtx-second-brain folder (no duplicate roots), 4 files identical by sha256 to the Mac vault, Mac manifest matches Drive ids and hashes. The resume trigger and the iOS interval/edit triggers move to ticket 15 smoke test.

@@ -1,4 +1,4 @@
-Status: claimed
+Status: resolved
 Type: task
 Blocked by: 13
 
@@ -19,3 +19,7 @@ Spec: ../spec.md
 - Status bar (desktop only; mobile has none): signed out / syncing / not synced yet / confirm first sync / confirm deletes / N not synced / sync failed / synced X ago (+skipped). Refreshes every 30 s; click opens the log. "Show last sync log" command for mobile.
 - Verified live on macOS: after reload, the startup sync opened "Confirm first sync" listing "Upload to Drive: 2" with both files; Cancel closed it, paused; an interval trigger was skipped; status bar "Drive: confirm first sync"; the log modal renders.
 - Remaining: the user confirms the real first sync; the mass-delete dialog live (engine guard is unit-tested, same dialog path); iOS check with the next BRAT release.
+
+## Answer
+
+Shipped in 0.2.0. First sync cannot proceed without the dialog: verified live (startup opened "Confirm first sync", Cancel paused auto syncs, confirming ran the sync on both devices). A guarded plan waits for confirmation: engine-tested, same dialog path. Live mass-delete dialog moves to ticket 15 smoke test.

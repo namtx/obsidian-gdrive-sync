@@ -1,11 +1,12 @@
-import { Notice, Platform, Plugin, TFile, type TAbstractFile } from "obsidian";
-import type { SyncResult } from "./core/engine";
+import { Notice, Platform, Plugin, TFile, type Events, type TAbstractFile } from "obsidian";
+import type { LogEntry, SyncResult } from "./core/engine";
+import { applyConfigChanges } from "./obsidian/config-apply";
 import { statusText, type SyncState } from "./obsidian/status";
 import { ConfirmSyncModal, SyncLogModal } from "./obsidian/ui";
 import { AdapterBaseStore } from "./obsidian/base-store";
 import { ObsidianLocalStore } from "./obsidian/local-store";
 import { RenameJournal } from "./obsidian/rename-journal";
-import { inScope, type ScopeSettings } from "./obsidian/scope";
+import { configChanges, inScope, type ScopeSettings } from "./obsidian/scope";
 import { SyncController } from "./obsidian/sync-controller";
 import { SyncRunner } from "./obsidian/sync-runner";
 import { finishAuth, PROTOCOL_ACTION, revoke, startAuth, TokenManager, type OAuthClient } from "./drive/oauth";
@@ -27,7 +28,15 @@ export default class GDriveSyncPlugin extends Plugin {
   private confirmOpen = false;
 
   async onload() {
-    this.data = { ...DEFAULT_DATA, ...((await this.loadData()) as Partial<PluginData> | null) };
+    const saved = ((await this.loadData()) ?? {}) as Partial<PluginData> & { syncConfig?: boolean };
+    this.data = { ...DEFAULT_DATA, ...saved };
+    // 0.2.0 had one toggle for the whole config folder.
+    if (saved.syncConfig !== undefined && !saved.configSync) {
+      const on = saved.syncConfig;
+      this.data.configSync = { plugins: on, settings: on, themes: on };
+      delete (this.data as { syncConfig?: boolean }).syncConfig;
+    }
+    this.data.configSync = { ...DEFAULT_DATA.configSync, ...this.data.configSync };
     this.initTokenManager();
 
     this.localStore = new ObsidianLocalStore(this.app.vault, () => this.scope);
@@ -75,6 +84,13 @@ export default class GDriveSyncPlugin extends Plugin {
       this.registerEvent(this.app.vault.on("modify", onEdit));
       this.registerEvent(this.app.vault.on("delete", onEdit));
       this.registerEvent(this.app.vault.on("rename", onEdit));
+      // Config folder changes (enabling a plugin, changing a setting) are not vault events. The
+      // undocumented "raw" event sees every adapter-level change, including the config folder.
+      this.registerEvent(
+        (this.app.vault as Events).on("raw", (path: unknown) => {
+          if (typeof path === "string" && path.startsWith(`${this.app.vault.configDir}/`)) this.noteEdit(path);
+        }),
+      );
       void this.controller.trigger("startup");
     });
 
@@ -96,6 +112,11 @@ export default class GDriveSyncPlugin extends Plugin {
 
   syncNow(): Promise<void> {
     return this.controller.trigger("manual");
+  }
+
+  /** Load, reload or unload plugins whose files a sync just changed on this device. */
+  applySyncedConfig(log: LogEntry[]): Promise<string[]> {
+    return applyConfigChanges(this.app, configChanges(log, this.scope), this.manifest.id);
   }
 
   showLog() {
@@ -157,7 +178,7 @@ export default class GDriveSyncPlugin extends Plugin {
   }
 
   get scope(): ScopeSettings {
-    return { configDir: this.app.vault.configDir, pluginDir: this.pluginDir, syncConfig: this.data.syncConfig };
+    return { configDir: this.app.vault.configDir, pluginDir: this.pluginDir, config: this.data.configSync };
   }
 
   async save() {

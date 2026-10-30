@@ -1,5 +1,6 @@
 import { App, Notice, Platform, PluginSettingTab, Setting } from "obsidian";
 import type { RenameEvent } from "../core/renames";
+import { NO_CONFIG_SYNC, type ConfigSync } from "./scope";
 import { parseClientJson, type PendingAuth, type Tokens } from "../drive/oauth";
 import type GDriveSyncPlugin from "../main";
 
@@ -9,8 +10,8 @@ export interface PluginData {
   clientSecret: string;
   tokens: Tokens | null;
   pendingAuth: PendingAuth | null;
-  /** Sync the config folder (settings, themes, other plugins). */
-  syncConfig: boolean;
+  /** Which parts of the config folder sync. */
+  configSync: ConfigSync;
   /** Files above this size are skipped and listed. */
   maxFileSizeMB: number;
   /** Vault renames not yet consumed by a clean sync. */
@@ -26,7 +27,7 @@ export const DEFAULT_DATA: PluginData = {
   clientSecret: "",
   tokens: null,
   pendingAuth: null,
-  syncConfig: false,
+  configSync: { ...NO_CONFIG_SYNC },
   maxFileSizeMB: 50,
   pendingRenames: [],
   deviceName: "",
@@ -131,16 +132,34 @@ export class SettingsTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
-      .setName(`Sync ${this.app.vault.configDir} folder`)
+      .setName(`${this.app.vault.configDir} folder`)
       .setDesc(
-        "Settings, themes and other plugins. Workspace layout and this plugin's own data (tokens) are never synced. Off by default.",
+        "Off by default. Turn on the same toggles on every device. Workspace layout and this plugin's own data (tokens) never sync.",
       )
-      .addToggle((toggle) =>
-        toggle.setValue(data.syncConfig).onChange(async (value) => {
-          data.syncConfig = value;
-          await this.plugin.save();
-        }),
-      );
+      .setHeading();
+
+    const configToggle = (key: keyof ConfigSync, name: string, desc: string) =>
+      new Setting(containerEl)
+        .setName(name)
+        .setDesc(desc)
+        .addToggle((toggle) =>
+          toggle.setValue(data.configSync[key]).onChange(async (value) => {
+            data.configSync[key] = value;
+            await this.plugin.save();
+          }),
+        );
+    configToggle(
+      "plugins",
+      "Community plugins",
+      "Installed plugins, their settings and which are enabled. Changes from another device load without a restart. " +
+        "Plugin code from your other devices runs here. Desktop-only plugins stay off on mobile.",
+    );
+    configToggle(
+      "settings",
+      "Obsidian settings",
+      "Editor, files and links, appearance, hotkeys and core plugins. Applied after reloading Obsidian.",
+    );
+    configToggle("themes", "Themes and CSS snippets", "Applied after reloading Obsidian.");
   }
 
   private async pickClientJson() {

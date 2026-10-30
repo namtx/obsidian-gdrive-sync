@@ -20,7 +20,7 @@ Keep one Obsidian vault in sync between macOS and iPhone, using Google Drive as 
 ### Scope
 - Vault: mostly Markdown, under ~1 GB, a few thousand files. Notes and attachments sync.
 - Always excluded: `.obsidian/workspace*.json`, `.trash`.
-- Rest of `.obsidian/` (settings, themes, plugins): optional, default off.
+- Rest of `.obsidian/`: optional, default off, in three toggles: community plugins (code, settings, enabled list; applied live by enabling, disabling or reloading plugins, desktop-only plugins skipped on mobile), Obsidian settings, and themes/snippets (applied on reload). This plugin's own folder never syncs. (Added 2026-10-30, ticket 16.)
 - Files over a configurable size (default 50 MB) are skipped and listed in status.
 - Out of scope for v1: multiple vaults per install, selective folder sync, sharing with other people, Android/Windows testing (should still work).
 

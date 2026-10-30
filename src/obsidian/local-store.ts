@@ -28,7 +28,7 @@ export class ObsidianLocalStore implements LocalStore {
       .getFiles()
       .filter((f) => inScope(f.path, s))
       .map((f) => ({ path: f.path, size: f.stat.size, mtime: f.stat.mtime }));
-    if (s.syncConfig) await this.walkConfig(this.vault.configDir, s, files);
+    if (s.config.plugins || s.config.settings || s.config.themes) await this.walkConfig(this.vault.configDir, s, files);
     return files;
   }
 

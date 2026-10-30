@@ -91,6 +91,11 @@ export class SyncRunner {
       await this.saver.flush();
       if (result.status === "synced") await this.plugin.renames.consumed(renames.length);
       record.result = result;
+      if (result.status === "synced" || result.status === "partial") {
+        await this.plugin
+          .applySyncedConfig(result.log)
+          .catch((e) => console.error("Google Drive Sync: applying config changes failed", e));
+      }
       if (result.status === "needsConfirmation") {
         this.paused = result.reason;
         this.plugin.askConfirmation(result);

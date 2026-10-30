@@ -78,6 +78,7 @@ export class SyncRunner {
     this.plugin.onSyncStarted();
     const data = this.plugin.data;
     const renames = this.plugin.renames.snapshot();
+    const scopeKey = JSON.stringify({ config: data.configSync, maxFileSizeMB: data.maxFileSizeMB });
     const record: SyncRecord = { trigger, startedAt: Date.now(), finishedAt: 0, result: null, error: null };
     try {
       const result = await engine.sync({
@@ -86,6 +87,7 @@ export class SyncRunner {
         scope: (path) => inScope(path, this.plugin.scope),
         maxFileSize: data.maxFileSizeMB * 1024 * 1024,
         commit: () => this.saver.request(),
+        fullListing: scopeKey !== data.lastScope,
         // The enabled-plugins list differs per device on the first plugin sync; merge it instead of keeping both.
         customMerge: {
           matches: (path) => path === `${this.plugin.app.vault.configDir}/community-plugins.json`,
@@ -95,7 +97,13 @@ export class SyncRunner {
         ...extra,
       });
       await this.saver.flush();
-      if (result.status === "synced") await this.plugin.renames.consumed(renames.length);
+      if (result.status === "synced") {
+        await this.plugin.renames.consumed(renames.length);
+        if (data.lastScope !== scopeKey) {
+          data.lastScope = scopeKey;
+          await this.plugin.save();
+        }
+      }
       record.result = result;
       if (result.status === "synced" || result.status === "partial") {
         await this.plugin

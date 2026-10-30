@@ -198,3 +198,34 @@ describe("plugin sync between devices", () => {
     expect(changes.enabledList).toBe(true);
   });
 });
+
+describe("widening the scope", () => {
+  const off = (p: string) => inScope(p, base);
+  const on = (p: string) => inScope(p, { ...base, config: { ...NO_CONFIG_SYNC, plugins: true } });
+
+  async function setup() {
+    const w = world();
+    w.mac.local.put("note.md", "n").put(".obsidian/plugins/dataview/main.js", "code");
+    await w.mac.syncOk({ scope: on });
+    // The phone syncs with plugins off: it sees the change, skips it as out of scope, and moves its cursor past it.
+    await w.phone.syncOk({ scope: off });
+    return w;
+  }
+
+  it("without a full listing, files that arrived while out of scope are never seen (the bug)", async () => {
+    const { phone } = await setup();
+    await phone.syncOk({ scope: on });
+    expect(phone.local.files.has(".obsidian/plugins/dataview/main.js")).toBe(false);
+  });
+
+  it("a full listing after turning a toggle on downloads them and does not duplicate", async () => {
+    const { phone, remote } = await setup();
+    phone.local.put(".obsidian/plugins/calendar/main.js", "cal");
+
+    await phone.syncOk({ scope: on, fullListing: true });
+
+    expect(phone.local.text(".obsidian/plugins/dataview/main.js")).toBe("code");
+    expect(remote.paths()).toEqual([".obsidian/plugins/calendar/main.js", ".obsidian/plugins/dataview/main.js", "note.md"]);
+    expect([...remote.files.values()].filter((f) => f.meta.path.endsWith("dataview/main.js"))).toHaveLength(1);
+  });
+});

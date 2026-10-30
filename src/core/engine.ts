@@ -38,6 +38,12 @@ export interface SyncOptions {
   retry?: RetryPolicy;
   /** Persist the manifest. Called after every action that changed it. */
   commit?: (manifest: Manifest) => Promise<void>;
+  /**
+   * List the whole remote instead of reading changes since the cursor. Needed
+   * when the scope widened: changes to paths that were out of scope were
+   * skipped and the cursor moved past them, so only a full listing finds them.
+   */
+  fullListing?: boolean;
   /** Format-aware merges for specific files, tried before the generic conflict handling. */
   customMerge?: CustomMerge;
 }
@@ -100,7 +106,7 @@ export class SyncEngine {
 
     const localFiles = (await this.local.list()).filter((f) => inScope(f.path));
     for (const f of localFiles) if (f.size > maxSize) oversized.add(f.path);
-    const { files, cursor } = await this.remoteView();
+    const { files, cursor } = options.fullListing ? await this.remote.listAll() : await this.remoteView();
     const remoteFiles = files.filter((f) => inScope(f.path));
     for (const f of remoteFiles) if (f.size > maxSize) oversized.add(f.path);
     const ignored = (path: VaultPath) => !inScope(path) || oversized.has(path);

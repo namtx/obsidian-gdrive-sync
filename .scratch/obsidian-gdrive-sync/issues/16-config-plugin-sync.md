@@ -21,3 +21,5 @@ Spec: ../spec.md
 ## Comments
 
 2026-10-30: Bug found before first use. On the first plugin sync both devices have a community-plugins.json with no shared base, which became a keep-both conflict: the remote list took the path and the receiving device could get its plugins disabled. Fixed in 0.3.1 with an engine `customMerge` hook (also stores bases for matching paths) and `mergeStringSet`: union without a base, three-way additions and removals with one. Tests in tests/core-merge.test.ts.
+
+2026-10-30: Bug found live. A device that synced while a config toggle was off skipped the out-of-scope changes and moved its cursor past them. After the toggle was turned on, it never saw those remote files, and uploaded its own community-plugins.json as a second file at the same path. Fix: the runner keeps the scope key (config toggles + size cap) of the last clean sync; when it differs, the engine does a full listing (`fullListing`). Tests in tests/obsidian-scope.test.ts. The orphan duplicate was trashed in Drive.

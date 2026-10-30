@@ -20,6 +20,8 @@ export interface PluginData {
   deviceName: string;
   /** Foreground sync interval; 0 turns it off. */
   intervalMinutes: number;
+  /** Scope (config toggles, size cap) of the last clean sync; a change forces one full Drive listing. */
+  lastScope: string;
 }
 
 export const DEFAULT_DATA: PluginData = {
@@ -32,6 +34,7 @@ export const DEFAULT_DATA: PluginData = {
   pendingRenames: [],
   deviceName: "",
   intervalMinutes: 5,
+  lastScope: "",
 };
 
 export class SettingsTab extends PluginSettingTab {

@@ -150,16 +150,16 @@ export class SettingsTab extends PluginSettingTab {
         );
     configToggle(
       "plugins",
-      "Community plugins",
-      "Installed plugins, their settings and which are enabled. Changes from another device load without a restart. " +
+      "Sync community plugins",
+      "Installed plugins, their settings and which are enabled (separate from Obsidian's own Community plugins switch). Changes from another device load without a restart. " +
         "Plugin code from your other devices runs here. Desktop-only plugins stay off on mobile.",
     );
     configToggle(
       "settings",
-      "Obsidian settings",
+      "Sync Obsidian settings",
       "Editor, files and links, appearance, hotkeys and core plugins. Applied after reloading Obsidian.",
     );
-    configToggle("themes", "Themes and CSS snippets", "Applied after reloading Obsidian.");
+    configToggle("themes", "Sync themes and CSS snippets", "Applied after reloading Obsidian.");
   }
 
   private async pickClientJson() {

@@ -1,4 +1,5 @@
 import { App, Notice, Platform, PluginSettingTab, Setting } from "obsidian";
+import type { RenameEvent } from "../core/renames";
 import { parseClientJson, type PendingAuth, type Tokens } from "../drive/oauth";
 import type GDriveSyncPlugin from "../main";
 
@@ -8,6 +9,12 @@ export interface PluginData {
   clientSecret: string;
   tokens: Tokens | null;
   pendingAuth: PendingAuth | null;
+  /** Sync the config folder (settings, themes, other plugins). */
+  syncConfig: boolean;
+  /** Files above this size are skipped and listed. */
+  maxFileSizeMB: number;
+  /** Vault renames not yet consumed by a clean sync. */
+  pendingRenames: RenameEvent[];
 }
 
 export const DEFAULT_DATA: PluginData = {
@@ -15,6 +22,9 @@ export const DEFAULT_DATA: PluginData = {
   clientSecret: "",
   tokens: null,
   pendingAuth: null,
+  syncConfig: false,
+  maxFileSizeMB: 50,
+  pendingRenames: [],
 };
 
 export class SettingsTab extends PluginSettingTab {

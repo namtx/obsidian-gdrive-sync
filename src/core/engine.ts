@@ -30,8 +30,10 @@ export interface SyncOptions {
   /** The user has agreed to a mass delete. */
   confirmDeletes?: boolean;
   deleteGuard?: DeleteGuard;
-  /** Paths outside the sync scope are ignored on both sides. */
-  include?: (path: VaultPath, size: number) => boolean;
+  /** Paths outside the sync scope are ignored on both sides, as if they did not exist. */
+  scope?: (path: VaultPath) => boolean;
+  /** Files larger than this (on either side) are left alone and listed in `summary.skipped`. */
+  maxFileSize?: number;
   /** Wraps each action; transient failures can be retried with backoff here. */
   retry?: RetryPolicy;
   /** Persist the manifest. Called after every action that changed it. */
@@ -47,6 +49,7 @@ export interface PlanSummary {
   deleteLocal: VaultPath[];
   deleteRemote: VaultPath[];
   moves: Move[];
+  /** Over the size cap; neither transferred nor deleted. */
   skipped: VaultPath[];
 }
 
@@ -73,35 +76,39 @@ export class SyncEngine {
   ) {}
 
   async sync(options: SyncOptions): Promise<SyncResult> {
-    const include = options.include ?? (() => true);
+    const inScope = options.scope ?? (() => true);
+    const maxSize = options.maxFileSize ?? Infinity;
     const retry: RetryPolicy = options.retry ?? ((op) => op());
     const commit = options.commit ?? (async () => {});
     const now = options.now ?? (() => new Date());
     const guard = options.deleteGuard ?? DEFAULT_DELETE_GUARD;
     const firstSync = this.manifest.cursor === null;
     const log: LogEntry[] = [];
-    const skipped: VaultPath[] = [];
+    // Oversized on either side: the path is left alone everywhere, so it can never look deleted.
+    const oversized = new Set<VaultPath>();
+
+    const localFiles = (await this.local.list()).filter((f) => inScope(f.path));
+    for (const f of localFiles) if (f.size > maxSize) oversized.add(f.path);
+    const { files, cursor } = await this.remoteView();
+    const remoteFiles = files.filter((f) => inScope(f.path));
+    for (const f of remoteFiles) if (f.size > maxSize) oversized.add(f.path);
+    const ignored = (path: VaultPath) => !inScope(path) || oversized.has(path);
 
     const local = new Map<VaultPath, LocalState>();
-    for (const f of await this.local.list()) {
-      if (!include(f.path, f.size)) {
-        skipped.push(f.path);
-        continue;
-      }
+    for (const f of localFiles) {
+      if (oversized.has(f.path)) continue;
       local.set(f.path, { path: f.path, hash: await sha256(await this.local.read(f.path)), mtime: f.mtime });
     }
-
-    const { files, cursor } = await this.remoteView();
     const remote = new Map<VaultPath, RemoteFile>();
-    for (const f of files) {
-      if (include(f.path, f.size)) remote.set(f.path, f);
-      else if (!local.has(f.path) && !skipped.includes(f.path)) skipped.push(f.path);
-    }
+    for (const f of remoteFiles) if (!oversized.has(f.path)) remote.set(f.path, f);
+    // Manifest entries for ignored paths (e.g. `.obsidian/` after turning config sync off) must not read as deletes.
+    const scoped = Manifest.fromJSON(this.manifest.toJSON());
+    for (const e of scoped.entries()) if (ignored(e.path)) scoped.delete(e.path);
 
-    const moves = firstSync ? [] : detectRenames(local, remote, this.manifest, options.renameEvents);
+    const moves = firstSync ? [] : detectRenames(local, remote, scoped, options.renameEvents);
     const movedLocal = applyMovesToLocal(local, moves);
-    const actions = plan(movedLocal, applyMovesToRemote(remote, moves), applyMovesToManifest(this.manifest, moves));
-    const summary = summarize(actions, moves, skipped);
+    const actions = plan(movedLocal, applyMovesToRemote(remote, moves), applyMovesToManifest(scoped, moves));
+    const summary = summarize(actions, moves, [...oversized].sort());
 
     if (firstSync && !options.confirmFirstSync && !options.dryRun)
       return { status: "needsConfirmation", reason: "firstSync", summary, log };

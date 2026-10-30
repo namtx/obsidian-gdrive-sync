@@ -1,4 +1,4 @@
-Status: claimed
+Status: resolved
 Type: task
 Blocked by: 01
 
@@ -19,3 +19,7 @@ Spec: ../spec.md
 2026-10-30: The user changed the registered redirect URI to https://namtx.dev/obsidian-gdrive-sync/oauth.html (the final URL, no 301 hop); REDIRECT_URI updated to match.
 
 2026-10-30: macOS verified. The app had to be published (it was in Testing, giving "has not completed the Google verification process"). Sign-in succeeded; after a plugin reload the stored refresh token refreshed, the new token persisted to data.json, and Drive about.get returned 200. Remaining: sign-in on iPhone (with the BRAT build, ticket 15).
+
+## Answer
+
+Sign-in works on macOS and iPhone (iPhone via the BRAT 0.1.0 release, client JSON imported from Files). The token refreshes after a restart (verified on macOS: reload, forced refresh, Drive about.get 200). Google Web client + GitHub Pages redirect page (https://namtx.dev/obsidian-gdrive-sync/oauth.html) forwarding to obsidian://gdrive-sync-auth; the OAuth app must be published (In production). Setup: docs/setup-google-oauth.md.

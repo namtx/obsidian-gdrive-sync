@@ -1,4 +1,8 @@
-import { Notice, Plugin } from "obsidian";
+import { Notice, Plugin, TFile } from "obsidian";
+import { AdapterBaseStore } from "./obsidian/base-store";
+import { ObsidianLocalStore } from "./obsidian/local-store";
+import { RenameJournal } from "./obsidian/rename-journal";
+import type { ScopeSettings } from "./obsidian/scope";
 import { finishAuth, PROTOCOL_ACTION, revoke, startAuth, TokenManager, type OAuthClient } from "./drive/oauth";
 import { obsidianHttp } from "./obsidian/http";
 import { DEFAULT_DATA, SettingsTab, type PluginData } from "./obsidian/settings";
@@ -6,11 +10,27 @@ import { DEFAULT_DATA, SettingsTab, type PluginData } from "./obsidian/settings"
 export default class GDriveSyncPlugin extends Plugin {
   data: PluginData = { ...DEFAULT_DATA };
   tokenManager: TokenManager | null = null;
+  localStore!: ObsidianLocalStore;
+  baseStore!: AdapterBaseStore;
+  renames!: RenameJournal;
   private settingsTab!: SettingsTab;
 
   async onload() {
     this.data = { ...DEFAULT_DATA, ...((await this.loadData()) as Partial<PluginData> | null) };
     this.initTokenManager();
+
+    this.localStore = new ObsidianLocalStore(this.app.vault, () => this.scope);
+    this.baseStore = new AdapterBaseStore(this.app.vault.adapter, `${this.pluginDir}/bases`);
+    this.renames = new RenameJournal(this.data.pendingRenames, async (events) => {
+      this.data.pendingRenames = events;
+      await this.save();
+    });
+    // Folder renames also fire for each file inside, so files are enough.
+    this.registerEvent(
+      this.app.vault.on("rename", (file, oldPath) => {
+        if (file instanceof TFile) void this.renames.record(oldPath, file.path);
+      }),
+    );
 
     this.settingsTab = new SettingsTab(this.app, this);
     this.addSettingTab(this.settingsTab);
@@ -24,6 +44,14 @@ export default class GDriveSyncPlugin extends Plugin {
     });
 
     this.registerObsidianProtocolHandler(PROTOCOL_ACTION, (params) => this.completeSignIn(params));
+  }
+
+  get pluginDir(): string {
+    return this.manifest.dir ?? `${this.app.vault.configDir}/plugins/${this.manifest.id}`;
+  }
+
+  get scope(): ScopeSettings {
+    return { configDir: this.app.vault.configDir, pluginDir: this.pluginDir, syncConfig: this.data.syncConfig };
   }
 
   async save() {

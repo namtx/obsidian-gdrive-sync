@@ -10,7 +10,8 @@
     "build": "tsc --noEmit && node esbuild.config.mjs production",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:live": "DRIVE_LIVE=${DRIVE_LIVE:-$HOME/Documents/namtx-second-brain/.obsidian/plugins/gdrive-sync/data.json} vitest run tests/drive-live.test.ts && DRIVE_LIVE=${DRIVE_LIVE:-$HOME/Documents/namtx-second-brain/.obsidian/plugins/gdrive-sync/data.json} vitest run tests/sync-live.test.ts"
   },
   "license": "MIT",
   "devDependencies": {

@@ -41,7 +41,7 @@ describe("plan", () => {
 
   it("uploads a local edit onto the existing remote file", () => {
     expect(run({ local: [L("a.md", "h2")], remote: [R("a.md", "h1")], base: [["a.md", "h1"]] })).toEqual([
-      { type: "upload", path: "a.md", remoteId: "id-a.md" },
+      { type: "upload", path: "a.md", remoteId: "id-a.md", expectedHash: "h1" },
     ]);
   });
 

@@ -117,3 +117,47 @@ describe("resilience", () => {
     expect(remote.paths()).toEqual(["a.md"]);
   });
 });
+
+describe("lagging change feed", () => {
+  it("never overwrites a remote edit the feed has not shown yet; merges once it appears", async () => {
+    const { mac, phone, remote } = world();
+    mac.local.put("n.md", "one\ntwo\nthree\n");
+    await mac.syncOk();
+    await phone.syncOk();
+
+    phone.local.put("n.md", "one\ntwo\nthree\nfrom phone\n");
+    await phone.syncOk();
+    remote.lag = 1; // the Mac cannot see the phone's upload yet
+    mac.local.put("n.md", "ONE\ntwo\nthree\n");
+
+    const blind = await mac.sync();
+    expect(blind.status).toBe("partial");
+    expect(blind.log).toMatchObject([{ action: "upload", path: "n.md", ok: false }]);
+    expect(remote.text("n.md")).toBe("one\ntwo\nthree\nfrom phone\n");
+
+    remote.lag = 0;
+    await mac.syncOk();
+    await phone.syncOk();
+    expect(mac.local.text("n.md")).toBe("ONE\ntwo\nthree\nfrom phone\n");
+    expect(phone.local.text("n.md")).toBe("ONE\ntwo\nthree\nfrom phone\n");
+  });
+
+  it("never trashes a remote edit the feed has not shown yet", async () => {
+    const { mac, phone, remote } = world();
+    for (let i = 0; i < 10; i++) mac.local.put(`f${i}.md`, `${i}`);
+    await mac.syncOk();
+    await phone.syncOk();
+
+    phone.local.put("f1.md", "edited on phone");
+    await phone.syncOk();
+    remote.lag = 1;
+    await mac.local.delete("f1.md");
+
+    expect((await mac.sync()).status).toBe("partial");
+    expect(remote.text("f1.md")).toBe("edited on phone");
+
+    remote.lag = 0;
+    await mac.syncOk();
+    expect(mac.local.text("f1.md")).toBe("edited on phone");
+  });
+});

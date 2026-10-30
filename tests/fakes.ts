@@ -1,13 +1,15 @@
 import { sha256 } from "../src/core/hash";
-import type {
-  LocalFile,
+import {
+  RemoteChangedError,
+  type Hash,
+  type LocalFile,
   LocalStore,
-  RemoteChange,
-  RemoteDelta,
-  RemoteFile,
-  RemoteSnapshot,
-  RemoteStore,
-  VaultPath,
+  type RemoteChange,
+  type RemoteDelta,
+  type RemoteFile,
+  type RemoteSnapshot,
+  type RemoteStore,
+  type VaultPath,
 } from "../src/core/types";
 
 export const text = (s: string) => new TextEncoder().encode(s);
@@ -89,6 +91,8 @@ export class FakeRemote implements RemoteStore {
   calls: string[] = [];
   failOn = new Set<VaultPath>();
   private log: RemoteChange[] = [];
+  /** Hide this many of the newest changes from the feed, simulating Drive's change-feed lag. */
+  lag = 0;
   /** Cursors older than this sequence number are rejected, simulating expiry. */
   oldestValidCursor = 0;
   private nextId = 1;
@@ -135,7 +139,8 @@ export class FakeRemote implements RemoteStore {
     this.calls.push(`changesSince ${cursor}`);
     const seq = Number(cursor);
     if (!Number.isInteger(seq) || seq < this.oldestValidCursor || seq > this.log.length) return null;
-    return { changes: this.log.slice(seq).map((c) => structuredClone(c)), cursor: String(this.log.length) };
+    const visible = Math.max(seq, this.log.length - this.lag);
+    return { changes: this.log.slice(seq, visible).map((c) => structuredClone(c)), cursor: String(visible) };
   }
 
   async download(id: string): Promise<Uint8Array> {
@@ -146,10 +151,12 @@ export class FakeRemote implements RemoteStore {
     return f.data;
   }
 
-  async upload(path: VaultPath, data: Uint8Array, id?: string): Promise<RemoteFile> {
+  async upload(path: VaultPath, data: Uint8Array, id?: string, expectedHash?: Hash): Promise<RemoteFile> {
     this.calls.push(`upload ${path}`);
     this.check(path);
     if (id !== undefined && !this.files.has(id)) throw new Error(`remote: no such id ${id}`);
+    if (id !== undefined && expectedHash !== undefined && this.files.get(id)!.meta.hash !== expectedHash)
+      throw new RemoteChangedError(id);
     return { ...(await this.store(path, data, id)).meta };
   }
 
@@ -163,9 +170,10 @@ export class FakeRemote implements RemoteStore {
     return { ...f.meta };
   }
 
-  async trash(id: string): Promise<void> {
+  async trash(id: string, expectedHash?: Hash): Promise<void> {
     const f = this.files.get(id);
     if (!f) throw new Error(`remote: no such id ${id}`);
+    if (expectedHash !== undefined && f.meta.hash !== expectedHash) throw new RemoteChangedError(id);
     this.calls.push(`trash ${f.meta.path}`);
     this.check(f.meta.path);
     this.files.delete(id);

@@ -9,13 +9,13 @@ export interface LocalState {
 
 export type Action =
   /** Local is new or changed; remote unchanged or absent. */
-  | { type: "upload"; path: VaultPath; remoteId?: string }
+  | { type: "upload"; path: VaultPath; remoteId?: string; expectedHash?: Hash }
   /** Remote is new or changed; local unchanged or absent. */
   | { type: "download"; path: VaultPath; remote: RemoteFile }
   /** Both sides hold the same content; only the manifest needs updating. */
   | { type: "record"; path: VaultPath; remote: RemoteFile }
   /** Deleted locally, unchanged remotely. */
-  | { type: "deleteRemote"; path: VaultPath; remoteId: string }
+  | { type: "deleteRemote"; path: VaultPath; remoteId: string; expectedHash: Hash }
   /** Deleted remotely, unchanged locally. */
   | { type: "deleteLocal"; path: VaultPath }
   /** Both deleted; only the manifest entry goes. */
@@ -53,8 +53,8 @@ function decide(
   if (!localChanged && !remoteChanged) return null;
 
   if (localChanged && !remoteChanged) {
-    if (l) return { type: "upload", path, remoteId: r?.id };
-    return { type: "deleteRemote", path, remoteId: r!.id };
+    if (l) return { type: "upload", path, remoteId: r?.id, expectedHash: r?.hash };
+    return { type: "deleteRemote", path, remoteId: r!.id, expectedHash: r!.hash };
   }
 
   if (!localChanged && remoteChanged) {

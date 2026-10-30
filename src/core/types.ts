@@ -53,9 +53,23 @@ export interface RemoteStore {
   /** Changes since `cursor`, or `null` if the cursor is no longer valid. */
   changesSince(cursor: string): Promise<RemoteDelta | null>;
   download(id: string): Promise<Uint8Array>;
-  /** Creates a file at `path`, or replaces content of `id` when given. */
-  upload(path: VaultPath, data: Uint8Array, id?: string): Promise<RemoteFile>;
+  /**
+   * Creates a file at `path`, or replaces content of `id` when given. With
+   * `expectedHash`, throws `RemoteChangedError` instead of overwriting content
+   * that changed since this device last saw it.
+   */
+  upload(path: VaultPath, data: Uint8Array, id?: string, expectedHash?: Hash): Promise<RemoteFile>;
   move(id: string, to: VaultPath): Promise<RemoteFile>;
-  /** Moves to trash, recoverable for a period; never a permanent delete. */
-  trash(id: string): Promise<void>;
+  /** Moves to trash, recoverable for a period; never a permanent delete. Same precondition as `upload`. */
+  trash(id: string, expectedHash?: Hash): Promise<void>;
+}
+
+/**
+ * The remote file changed since the state this device planned against, e.g.
+ * because the change feed lagged. Nothing was written; the next sync sees it.
+ */
+export class RemoteChangedError extends Error {
+  constructor(id: string) {
+    super(`changed on Drive since the last sync (${id}); will retry next sync`);
+  }
 }

@@ -187,7 +187,7 @@ export class SyncEngine {
     switch (action.type) {
       case "upload": {
         const data = await this.local.read(action.path);
-        await this.recordRemote(await this.remote.upload(action.path, data, action.remoteId), data);
+        await this.recordRemote(await this.remote.upload(action.path, data, action.remoteId, action.expectedHash), data);
         return;
       }
       case "download": {
@@ -201,7 +201,7 @@ export class SyncEngine {
         return;
       }
       case "deleteRemote": {
-        await this.remote.trash(action.remoteId);
+        await this.remote.trash(action.remoteId, action.expectedHash);
         await this.forget(action.path);
         return "moved to Drive trash";
       }
@@ -231,7 +231,7 @@ export class SyncEngine {
           const data = encoder.encode(merged);
           await this.assertLocalUnchanged(path, action.local.hash);
           await this.local.write(path, data);
-          await this.recordRemote(await this.remote.upload(path, data, action.remote.id), data);
+          await this.recordRemote(await this.remote.upload(path, data, action.remote.id, action.remote.hash), data);
           return "merged";
         }
       }
@@ -239,7 +239,7 @@ export class SyncEngine {
 
     // Binaries with a known base: last writer wins. The remote loser stays in Drive's revision history.
     if (base && !isMergeable(path) && action.local.mtime >= action.remote.mtime) {
-      await this.recordRemote(await this.remote.upload(path, localData, action.remote.id), localData);
+      await this.recordRemote(await this.remote.upload(path, localData, action.remote.id, action.remote.hash), localData);
       return "kept local (newer)";
     }
 
@@ -253,7 +253,8 @@ export class SyncEngine {
     const existing = this.manifest.get(copy);
     if (existing?.hash !== action.local.hash) {
       const copyId = existing?.remoteId ?? ctx.remote.get(copy)?.id;
-      await this.recordRemote(await this.remote.upload(copy, localData, copyId), localData);
+      const copyHash = existing?.hash ?? ctx.remote.get(copy)?.hash;
+      await this.recordRemote(await this.remote.upload(copy, localData, copyId, copyHash), localData);
     }
     await ctx.commit(this.manifest);
     const remoteData = await this.remote.download(action.remote.id);

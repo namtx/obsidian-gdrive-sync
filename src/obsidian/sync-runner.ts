@@ -1,5 +1,6 @@
 import { Notice } from "obsidian";
 import { SyncEngine, type SyncOptions, type SyncResult } from "../core/engine";
+import { mergeStringSet } from "../core/merge";
 import { Manifest } from "../core/manifest";
 import { DriveClient } from "../drive/client";
 import { AuthExpiredError, type TokenManager } from "../drive/oauth";
@@ -85,6 +86,11 @@ export class SyncRunner {
         scope: (path) => inScope(path, this.plugin.scope),
         maxFileSize: data.maxFileSizeMB * 1024 * 1024,
         commit: () => this.saver.request(),
+        // The enabled-plugins list differs per device on the first plugin sync; merge it instead of keeping both.
+        customMerge: {
+          matches: (path) => path === `${this.plugin.app.vault.configDir}/community-plugins.json`,
+          merge: mergeStringSet,
+        },
         ...confirmed,
         ...extra,
       });

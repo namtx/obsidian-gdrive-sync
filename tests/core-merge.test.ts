@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { conflictPath, isMergeable, mergeText } from "../src/core/merge";
+import { conflictPath, isMergeable, mergeStringSet, mergeText } from "../src/core/merge";
 import { world } from "./harness";
 
 describe("mergeText", () => {
@@ -130,5 +130,62 @@ describe("conflicts during sync", () => {
     expect(mac.local.text("pic.png")).toBe("phone (newer)");
     expect(mac.local.text("pic (conflict Mac 2026-10-30).png")).toBe("mac (older)");
     expect(remote.paths()).toEqual(["pic (conflict Mac 2026-10-30).png", "pic.png"]);
+  });
+});
+
+describe("mergeStringSet", () => {
+  const enc = (v: unknown) => new TextEncoder().encode(JSON.stringify(v));
+  const dec = (b: Uint8Array | null) => (b ? JSON.parse(new TextDecoder().decode(b)) : null);
+
+  it("keeps the union when there is no base", () => {
+    expect(dec(mergeStringSet(enc(["gdrive-sync"]), undefined, enc(["gdrive-sync", "dataview", "calendar"])))).toEqual([
+      "gdrive-sync",
+      "dataview",
+      "calendar",
+    ]);
+  });
+
+  it("applies additions and removals from both sides against the base", () => {
+    const base = enc(["a", "b", "c"]);
+    expect(dec(mergeStringSet(enc(["a", "c", "d"]), base, enc(["a", "b", "e"])))).toEqual(["a", "d", "e"]);
+  });
+
+  it("refuses anything that is not a string array", () => {
+    expect(mergeStringSet(enc({ a: true }), undefined, enc(["a"]))).toBeNull();
+    expect(mergeStringSet(new TextEncoder().encode("not json"), undefined, enc(["a"]))).toBeNull();
+  });
+});
+
+describe("custom merge in the engine", () => {
+  const list = ".obsidian/community-plugins.json";
+  const customMerge = { matches: (p: string) => p === list, merge: mergeStringSet };
+
+  it("merges both devices' enabled-plugin lists on their first plugin sync instead of keeping both", async () => {
+    const { mac, phone, remote } = world();
+    phone.local.put(list, JSON.stringify(["gdrive-sync", "dataview", "calendar"]));
+    await phone.syncOk({ customMerge });
+    mac.local.put(list, JSON.stringify(["gdrive-sync"]));
+
+    const result = await mac.syncOk({ customMerge });
+
+    expect(result.log).toContainEqual({ action: "conflict", path: list, ok: true, detail: "merged" });
+    expect(JSON.parse(mac.local.text(list)!)).toEqual(["gdrive-sync", "dataview", "calendar"]);
+    expect(remote.paths()).toEqual([list]);
+  });
+
+  it("propagates a disable made on one device while the other enabled something", async () => {
+    const { mac, phone } = world();
+    mac.local.put(list, JSON.stringify(["a", "b"]));
+    await mac.syncOk({ customMerge });
+    await phone.syncOk({ customMerge });
+    mac.local.put(list, JSON.stringify(["a"]));
+    phone.local.put(list, JSON.stringify(["a", "b", "c"]));
+    await phone.syncOk({ customMerge });
+
+    await mac.syncOk({ customMerge });
+    await phone.syncOk({ customMerge });
+
+    expect(JSON.parse(mac.local.text(list)!)).toEqual(["a", "c"]);
+    expect(JSON.parse(phone.local.text(list)!)).toEqual(["a", "c"]);
   });
 });

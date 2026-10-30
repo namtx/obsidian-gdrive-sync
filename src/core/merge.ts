@@ -40,3 +40,30 @@ export function conflictPath(path: VaultPath, device: string, date: Date, taken:
     if (!taken(candidate)) return candidate;
   }
 }
+
+/**
+ * Merge two JSON string arrays used as sets (e.g. the enabled-plugins list).
+ * With a base, each side's additions and removals apply; without one (first
+ * sync), the union is kept so neither device loses an enabled entry. Order:
+ * local entries first, then remote additions. Null if either side is not a
+ * string array.
+ */
+export function mergeStringSet(local: Uint8Array, base: Uint8Array | undefined, remote: Uint8Array): Uint8Array | null {
+  const parse = (data: Uint8Array): string[] | null => {
+    try {
+      const value: unknown = JSON.parse(new TextDecoder().decode(data));
+      return Array.isArray(value) && value.every((x) => typeof x === "string") ? value : null;
+    } catch {
+      return null;
+    }
+  };
+  const l = parse(local);
+  const r = parse(remote);
+  const b = base ? parse(base) : [];
+  if (!l || !r || !b) return null;
+  const baseSet = new Set(b);
+  const removed = new Set([...b.filter((x) => !l.includes(x)), ...b.filter((x) => !r.includes(x))]);
+  const out: string[] = [];
+  for (const x of [...l, ...r]) if (!out.includes(x) && !(baseSet.has(x) && removed.has(x))) out.push(x);
+  return new TextEncoder().encode(JSON.stringify(out, null, 2));
+}

@@ -38,6 +38,14 @@ export interface SyncOptions {
   retry?: RetryPolicy;
   /** Persist the manifest. Called after every action that changed it. */
   commit?: (manifest: Manifest) => Promise<void>;
+  /** Format-aware merges for specific files, tried before the generic conflict handling. */
+  customMerge?: CustomMerge;
+}
+
+export interface CustomMerge {
+  matches(path: VaultPath): boolean;
+  /** Merged content, or null to fall back to the generic handling. `base` is absent on a first sync. */
+  merge(local: Uint8Array, base: Uint8Array | undefined, remote: Uint8Array): Uint8Array | null;
 }
 
 export interface PlanSummary {
@@ -68,6 +76,8 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 export class SyncEngine {
+  private customMerge: CustomMerge | undefined;
+
   constructor(
     private local: LocalStore,
     private remote: RemoteStore,
@@ -83,6 +93,7 @@ export class SyncEngine {
     const now = options.now ?? (() => new Date());
     const guard = options.deleteGuard ?? DEFAULT_DELETE_GUARD;
     const firstSync = this.manifest.cursor === null;
+    this.customMerge = options.customMerge;
     const log: LogEntry[] = [];
     // Oversized on either side: the path is left alone everywhere, so it can never look deleted.
     const oversized = new Set<VaultPath>();
@@ -229,6 +240,18 @@ export class SyncEngine {
   private async resolveConflict(action: Extract<Action, { type: "conflict" }>, ctx: ActionContext): Promise<string> {
     const { path, base } = action;
     const localData = await this.local.read(path);
+    if (this.customMerge?.matches(path)) {
+      const remoteData = await this.remote.download(action.remote.id);
+      const baseData = base ? await this.base.get(path) : undefined;
+      const validBase = baseData && (await sha256(baseData)) === base?.hash ? baseData : undefined;
+      const merged = this.customMerge.merge(localData, validBase, remoteData);
+      if (merged) {
+        await this.assertLocalUnchanged(path, action.local.hash);
+        await this.local.write(path, merged);
+        await this.recordRemote(await this.remote.upload(path, merged, action.remote.id, action.remote.hash), merged);
+        return "merged";
+      }
+    }
     if (base && isMergeable(path)) {
       const baseData = await this.base.get(path);
       if (baseData && (await sha256(baseData)) === base.hash) {
@@ -272,7 +295,7 @@ export class SyncEngine {
 
   private async recordRemote(file: RemoteFile, data: Uint8Array) {
     this.manifest.set({ path: file.path, hash: await sha256(data), remoteId: file.id, revision: file.revision });
-    if (isMergeable(file.path)) await this.base.set(file.path, data);
+    if (isMergeable(file.path) || this.customMerge?.matches(file.path)) await this.base.set(file.path, data);
   }
 
   private async writeLocal(file: RemoteFile, data: Uint8Array) {

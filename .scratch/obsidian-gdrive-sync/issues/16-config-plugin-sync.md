@@ -17,3 +17,7 @@ Spec: ../spec.md
 - src/obsidian/config-apply.ts: via Obsidian's internal plugin manager (`app.plugins`, the same calls BRAT uses): loadManifests; disable plugins dropped from the synced list; enable newly listed ones, skipping desktop-only plugins on mobile; reload enabled plugins whose files changed (or call `onExternalSettingsChange` when only data.json changed). It updates the in-memory `enabledPlugins` without saving, since the synced list is already on disk and a stale set would be written back by Obsidian's next save. Skipped in restricted mode. Never touches this plugin. Settings and theme changes show a "reload Obsidian" notice.
 - The vault "raw" event now triggers a debounced sync for in-scope config-folder changes made on this device (e.g. enabling a plugin).
 - Tests: categories, configChanges, two-device plugin sync excluding tokens (tests/obsidian-scope.test.ts). Live on macOS with a throwaway plugin: enable (load v1), reload after a code change (unload, load v2), disable when dropped from the list; own plugin untouched; user config restored.
+
+## Comments
+
+2026-10-30: Bug found before first use. On the first plugin sync both devices have a community-plugins.json with no shared base, which became a keep-both conflict: the remote list took the path and the receiving device could get its plugins disabled. Fixed in 0.3.1 with an engine `customMerge` hook (also stores bases for matching paths) and `mergeStringSet`: union without a base, three-way additions and removals with one. Tests in tests/core-merge.test.ts.

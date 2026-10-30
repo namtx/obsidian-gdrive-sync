@@ -1,4 +1,7 @@
 import { Notice, Platform, Plugin, TFile, type TAbstractFile } from "obsidian";
+import type { SyncResult } from "./core/engine";
+import { statusText, type SyncState } from "./obsidian/status";
+import { ConfirmSyncModal, SyncLogModal } from "./obsidian/ui";
 import { AdapterBaseStore } from "./obsidian/base-store";
 import { ObsidianLocalStore } from "./obsidian/local-store";
 import { RenameJournal } from "./obsidian/rename-journal";
@@ -17,9 +20,11 @@ export default class GDriveSyncPlugin extends Plugin {
   renames!: RenameJournal;
   runner!: SyncRunner;
   controller!: SyncController;
-  /** Called after every sync; the status bar and log view hook in here. */
-  onSyncFinished?: () => void;
+  onSyncStarted = () => this.updateStatus();
+  onSyncFinished = () => this.updateStatus();
   private settingsTab!: SettingsTab;
+  private statusEl: HTMLElement | null = null;
+  private confirmOpen = false;
 
   async onload() {
     this.data = { ...DEFAULT_DATA, ...((await this.loadData()) as Partial<PluginData> | null) };
@@ -48,7 +53,17 @@ export default class GDriveSyncPlugin extends Plugin {
 
     this.addCommand({ id: "sync-now", name: "Sync now", callback: () => this.syncNow() });
     this.addRibbonIcon("refresh-cw", "Sync with Google Drive", () => this.syncNow());
+    this.addCommand({ id: "show-log", name: "Show last sync log", callback: () => this.showLog() });
     this.addCommand({ id: "sign-in", name: "Sign in to Google Drive", callback: () => this.signIn() });
+
+    // Desktop only: Obsidian mobile has no status bar. Mobile gets notices and the log command.
+    if (!Platform.isMobile) {
+      this.statusEl = this.addStatusBarItem();
+      this.statusEl.addClass("gdrive-sync-status");
+      this.statusEl.onClickEvent(() => this.showLog());
+      this.registerInterval(window.setInterval(() => this.updateStatus(), 30_000));
+      this.updateStatus();
+    }
     this.addCommand({ id: "sign-out", name: "Sign out of Google Drive", callback: () => this.signOut() });
 
     this.registerObsidianProtocolHandler(PROTOCOL_ACTION, (params) => this.completeSignIn(params));
@@ -81,6 +96,47 @@ export default class GDriveSyncPlugin extends Plugin {
 
   syncNow(): Promise<void> {
     return this.controller.trigger("manual");
+  }
+
+  showLog() {
+    new SyncLogModal(this.app, this.runner.last).open();
+  }
+
+  /** Open the confirmation dialog for a paused plan; confirming runs the sync with that approval. */
+  askConfirmation(result: Extract<SyncResult, { status: "needsConfirmation" }>) {
+    if (this.confirmOpen) return;
+    this.confirmOpen = true;
+    new ConfirmSyncModal(this.app, result, (confirmed) => {
+      this.confirmOpen = false;
+      if (!confirmed) {
+        new Notice("Google Drive Sync paused. Run Sync now to review again.");
+        this.updateStatus();
+        return;
+      }
+      this.runner.nextOptions = result.reason === "firstSync" ? { confirmFirstSync: true } : { confirmDeletes: true };
+      this.runner.paused = null;
+      void this.syncNow();
+    }).open();
+  }
+
+  get syncState(): SyncState {
+    if (!this.tokenManager) return { kind: "signedOut" };
+    if (this.runner.active) return { kind: "syncing" };
+    if (this.runner.paused) return { kind: "paused", reason: this.runner.paused };
+    const last = this.runner.last;
+    if (!last) return { kind: "never" };
+    if (last.error) return { kind: "error", message: last.error, at: last.finishedAt };
+    if (last.result?.status === "partial")
+      return { kind: "partial", failed: last.result.log.filter((e) => !e.ok).length, at: last.finishedAt };
+    if (last.result?.status === "synced")
+      return { kind: "synced", at: last.finishedAt, skipped: last.result.summary.skipped.length };
+    return { kind: "never" };
+  }
+
+  updateStatus() {
+    if (!this.statusEl) return;
+    this.statusEl.setText(statusText(this.syncState, Date.now()));
+    this.statusEl.setAttr("aria-label", "Google Drive Sync: click for the last sync log");
   }
 
   /** User edits schedule a debounced sync; the sync's own writes and out-of-scope paths do not. */

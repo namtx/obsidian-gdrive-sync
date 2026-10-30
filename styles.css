@@ -1,1 +1,23 @@
 /* Google Drive Sync */
+
+.gdrive-sync-section summary {
+  cursor: pointer;
+  font-weight: var(--font-semibold);
+  padding: 4px 0;
+}
+
+.gdrive-sync-section ul {
+  margin: 4px 0 8px;
+  max-height: 240px;
+  overflow-y: auto;
+  font-size: var(--font-ui-small);
+  overflow-wrap: anywhere;
+}
+
+.gdrive-sync-error {
+  color: var(--text-error);
+}
+
+.gdrive-sync-status {
+  cursor: pointer;
+}

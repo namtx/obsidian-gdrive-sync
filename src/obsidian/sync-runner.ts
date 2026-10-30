@@ -25,6 +25,12 @@ export class SyncRunner {
   private engineFor: TokenManager | null = null;
   private saver: ThrottledSaver;
   last: SyncRecord | null = null;
+  /** A plan is waiting for the user; automatic triggers skip until it is confirmed or a manual sync re-asks. */
+  paused: "firstSync" | "massDelete" | null = null;
+  /** Options for the next run only, e.g. the confirmation the user just gave. */
+  nextOptions: Partial<SyncOptions> = {};
+  /** True while a sync is running, for the status bar. */
+  active = false;
 
   constructor(private plugin: GDriveSyncPlugin) {
     this.local = new SelfWriteFilter(plugin.localStore);
@@ -64,6 +70,11 @@ export class SyncRunner {
       if (manual) new Notice("Google Drive Sync: sign in first (plugin settings).");
       return null;
     }
+    if (this.paused && !manual) return null;
+    const confirmed = this.nextOptions;
+    this.nextOptions = {};
+    this.active = true;
+    this.plugin.onSyncStarted();
     const data = this.plugin.data;
     const renames = this.plugin.renames.snapshot();
     const record: SyncRecord = { trigger, startedAt: Date.now(), finishedAt: 0, result: null, error: null };
@@ -74,12 +85,19 @@ export class SyncRunner {
         scope: (path) => inScope(path, this.plugin.scope),
         maxFileSize: data.maxFileSizeMB * 1024 * 1024,
         commit: () => this.saver.request(),
+        ...confirmed,
         ...extra,
       });
       await this.saver.flush();
       if (result.status === "synced") await this.plugin.renames.consumed(renames.length);
       record.result = result;
-      if (manual || result.status === "partial") new Notice(describe(result), result.status === "partial" ? 10_000 : 4_000);
+      if (result.status === "needsConfirmation") {
+        this.paused = result.reason;
+        this.plugin.askConfirmation(result);
+      } else {
+        this.paused = null;
+        if (manual || result.status === "partial") new Notice(describe(result), result.status === "partial" ? 10_000 : 4_000);
+      }
       return result;
     } catch (e) {
       await this.saver.flush().catch(() => {});
@@ -90,7 +108,8 @@ export class SyncRunner {
     } finally {
       record.finishedAt = Date.now();
       this.last = record;
-      this.plugin.onSyncFinished?.();
+      this.active = false;
+      this.plugin.onSyncFinished();
     }
   }
 }

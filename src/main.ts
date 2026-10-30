@@ -1,8 +1,10 @@
-import { Notice, Plugin, TFile } from "obsidian";
+import { Notice, Platform, Plugin, TFile, type TAbstractFile } from "obsidian";
 import { AdapterBaseStore } from "./obsidian/base-store";
 import { ObsidianLocalStore } from "./obsidian/local-store";
 import { RenameJournal } from "./obsidian/rename-journal";
-import type { ScopeSettings } from "./obsidian/scope";
+import { inScope, type ScopeSettings } from "./obsidian/scope";
+import { SyncController } from "./obsidian/sync-controller";
+import { SyncRunner } from "./obsidian/sync-runner";
 import { finishAuth, PROTOCOL_ACTION, revoke, startAuth, TokenManager, type OAuthClient } from "./drive/oauth";
 import { obsidianHttp } from "./obsidian/http";
 import { DEFAULT_DATA, SettingsTab, type PluginData } from "./obsidian/settings";
@@ -13,6 +15,10 @@ export default class GDriveSyncPlugin extends Plugin {
   localStore!: ObsidianLocalStore;
   baseStore!: AdapterBaseStore;
   renames!: RenameJournal;
+  runner!: SyncRunner;
+  controller!: SyncController;
+  /** Called after every sync; the status bar and log view hook in here. */
+  onSyncFinished?: () => void;
   private settingsTab!: SettingsTab;
 
   async onload() {
@@ -32,18 +38,62 @@ export default class GDriveSyncPlugin extends Plugin {
       }),
     );
 
+    this.runner = new SyncRunner(this);
+    await this.runner.load();
+    this.controller = new SyncController(async (trigger) => void (await this.runner.run(trigger)));
+    this.register(() => this.controller.dispose());
+
     this.settingsTab = new SettingsTab(this.app, this);
     this.addSettingTab(this.settingsTab);
 
+    this.addCommand({ id: "sync-now", name: "Sync now", callback: () => this.syncNow() });
+    this.addRibbonIcon("refresh-cw", "Sync with Google Drive", () => this.syncNow());
     this.addCommand({ id: "sign-in", name: "Sign in to Google Drive", callback: () => this.signIn() });
     this.addCommand({ id: "sign-out", name: "Sign out of Google Drive", callback: () => this.signOut() });
-    this.addCommand({
-      id: "sync-now",
-      name: "Sync now",
-      callback: () => new Notice("Google Drive Sync: not implemented yet"),
-    });
 
     this.registerObsidianProtocolHandler(PROTOCOL_ACTION, (params) => this.completeSignIn(params));
+
+    // Vault "create" events fire for every file while the vault loads; listen only once it is ready.
+    this.app.workspace.onLayoutReady(() => {
+      const onEdit = (file: TAbstractFile) => this.noteEdit(file.path);
+      this.registerEvent(this.app.vault.on("create", onEdit));
+      this.registerEvent(this.app.vault.on("modify", onEdit));
+      this.registerEvent(this.app.vault.on("delete", onEdit));
+      this.registerEvent(this.app.vault.on("rename", onEdit));
+      void this.controller.trigger("startup");
+    });
+
+    // Coming back to the foreground counts as opening the app (iOS suspends it in the background).
+    this.registerDomEvent(document, "visibilitychange", () => {
+      if (document.visibilityState === "visible" && Date.now() - this.controller.lastFinished > 60_000)
+        void this.controller.trigger("resume");
+    });
+
+    // Checked every 30 s, so interval changes in settings apply without re-registering.
+    this.registerInterval(
+      window.setInterval(() => {
+        const minutes = this.data.intervalMinutes;
+        if (minutes <= 0 || document.visibilityState !== "visible") return;
+        if (Date.now() - this.controller.lastFinished >= minutes * 60_000) void this.controller.trigger("interval");
+      }, 30_000),
+    );
+  }
+
+  syncNow(): Promise<void> {
+    return this.controller.trigger("manual");
+  }
+
+  /** User edits schedule a debounced sync; the sync's own writes and out-of-scope paths do not. */
+  private noteEdit(path: string) {
+    if (this.runner.local.isSelf(path) || !inScope(path, this.scope)) return;
+    this.controller.noteEdit();
+  }
+
+  get deviceName(): string {
+    if (this.data.deviceName.trim()) return this.data.deviceName.trim();
+    if (Platform.isIosApp) return Platform.isTablet ? "iPad" : "iPhone";
+    if (Platform.isAndroidApp) return "Android";
+    return Platform.isMacOS ? "Mac" : "Desktop";
   }
 
   get pluginDir(): string {

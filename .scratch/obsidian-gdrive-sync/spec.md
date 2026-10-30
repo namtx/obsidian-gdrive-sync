@@ -26,7 +26,7 @@ Keep one Obsidian vault in sync between macOS and iPhone, using Google Drive as 
 
 ### Drive layout and auth
 - Scope `drive.file`. Visible folder `ObsidianSync/<vault>/` mirroring the vault tree. The app only sees files it created.
-- OAuth with PKCE, Google **Web application** client created by the user in their own Cloud project, system browser for consent. Google rejects `obsidian://` redirect URIs, so Google redirects to a static page on GitHub Pages (`https://namtx.github.io/obsidian-gdrive-sync/oauth.html`) that forwards `code`/`state` to `obsidian://gdrive-sync-auth`. The client secret is entered per device and stored with the tokens. (Changed 2026-10-30 during ticket 09.)
+- OAuth with PKCE, Google **Web application** client created by the user in their own Cloud project, system browser for consent. Google rejects `obsidian://` redirect URIs, so Google redirects to a static page on GitHub Pages (`https://namtx.dev/obsidian-gdrive-sync/oauth.html`) that forwards `code`/`state` to `obsidian://gdrive-sync-auth`. The client secret is entered per device and stored with the tokens. (Changed 2026-10-30 during ticket 09.)
 - OAuth app set to "In production" (unverified, personal use) to avoid the 7-day refresh-token expiry of Testing mode.
 - Refresh token stored in plugin `data.json`, never synced.
 - Personal Gmail account.

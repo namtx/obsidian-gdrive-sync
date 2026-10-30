@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { HttpRequest, HttpResponse } from "../src/drive/http";
-import { AuthExpiredError, finishAuth, REDIRECT_URI, startAuth, TokenManager, type Tokens } from "../src/drive/oauth";
+import {
+  AuthExpiredError,
+  finishAuth,
+  parseClientJson,
+  REDIRECT_URI,
+  startAuth,
+  TokenManager,
+  type Tokens,
+} from "../src/drive/oauth";
 
 const client = { clientId: "cid.apps.googleusercontent.com", clientSecret: "secret" };
 
@@ -40,6 +48,31 @@ describe("startAuth", () => {
     const b = await startAuth(client);
     expect(a.pending.verifier).not.toBe(b.pending.verifier);
     expect(a.pending.state).not.toBe(b.pending.state);
+  });
+});
+
+describe("parseClientJson", () => {
+  const web = {
+    client_id: "cid.apps.googleusercontent.com",
+    project_id: "obsidian-sync",
+    auth_uri: "https://accounts.google.com/o/oauth2/auth",
+    token_uri: "https://oauth2.googleapis.com/token",
+    client_secret: "GOCSPX-abc",
+    redirect_uris: [REDIRECT_URI],
+  };
+
+  it("reads the client ID and secret from a Web client file", () => {
+    expect(parseClientJson(JSON.stringify({ web }))).toEqual({
+      clientId: "cid.apps.googleusercontent.com",
+      clientSecret: "GOCSPX-abc",
+    });
+  });
+
+  it("explains what is wrong with other files", () => {
+    expect(() => parseClientJson("not json")).toThrow(/Not a JSON file/);
+    expect(() => parseClientJson(JSON.stringify({ installed: web }))).toThrow(/Desktop client/);
+    expect(() => parseClientJson(JSON.stringify({ web: { client_id: "x" } }))).toThrow(/no client ID and secret/);
+    expect(() => parseClientJson(JSON.stringify({ web: { ...web, redirect_uris: [] } }))).toThrow(REDIRECT_URI);
   });
 });
 

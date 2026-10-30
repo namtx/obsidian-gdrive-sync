@@ -1,5 +1,5 @@
-import { App, PluginSettingTab, Setting } from "obsidian";
-import type { PendingAuth, Tokens } from "../drive/oauth";
+import { App, Notice, Platform, PluginSettingTab, Setting } from "obsidian";
+import { parseClientJson, type PendingAuth, type Tokens } from "../drive/oauth";
 import type GDriveSyncPlugin from "../main";
 
 /** Everything in the plugin's data.json. Never synced: it holds this device's tokens. */
@@ -33,28 +33,18 @@ export class SettingsTab extends PluginSettingTab {
     new Setting(containerEl).setName("Google account").setHeading();
 
     new Setting(containerEl)
-      .setName("OAuth client ID")
-      .setDesc("From your Google Cloud project (Web application client).")
-      .addText((text) =>
-        text
-          .setPlaceholder("….apps.googleusercontent.com")
-          .setValue(data.clientId)
-          .onChange(async (value) => {
-            data.clientId = value.trim();
-            await this.plugin.save();
-          }),
+      .setName("OAuth client")
+      .setDesc(
+        data.clientId
+          ? `Using ${data.clientId}. Stored only on this device.`
+          : "Import the client JSON downloaded from Google Cloud Console → Clients (Web application).",
+      )
+      .addButton((button) =>
+        button
+          .setButtonText(data.clientId ? "Replace client JSON" : "Import client JSON")
+          .setCta()
+          .onClick(() => this.pickClientJson()),
       );
-
-    new Setting(containerEl)
-      .setName("OAuth client secret")
-      .setDesc("Stored only on this device.")
-      .addText((text) => {
-        text.inputEl.type = "password";
-        text.setValue(data.clientSecret).onChange(async (value) => {
-          data.clientSecret = value.trim();
-          await this.plugin.save();
-        });
-      });
 
     const signedIn = data.tokens !== null;
     new Setting(containerEl)
@@ -69,8 +59,65 @@ export class SettingsTab extends PluginSettingTab {
           : button
               .setButtonText("Sign in")
               .setCta()
-              .setDisabled(!data.clientId || !data.clientSecret)
               .onClick(() => this.plugin.signIn()),
       );
+  }
+
+  private async pickClientJson() {
+    try {
+      const text = Platform.isDesktopApp ? await pickWithElectron() : await pickWithInput();
+      if (text === null) return;
+      await this.plugin.importClient(parseClientJson(text));
+      new Notice("OAuth client imported. You can delete the downloaded JSON file now.");
+    } catch (e) {
+      new Notice(e instanceof Error ? e.message : String(e), 10_000);
+    }
+    this.display();
+  }
+}
+
+/** Obsidian desktop silently drops file chooser requests from `<input type=file>`; use the native dialog. */
+async function pickWithElectron(): Promise<string | null> {
+  const { remote } = window.require("electron") as {
+    remote: {
+      dialog: {
+        showOpenDialog(options: object): Promise<{ canceled: boolean; filePaths: string[] }>;
+      };
+    };
+  };
+  const result = await remote.dialog.showOpenDialog({
+    title: "Import Google OAuth client JSON",
+    properties: ["openFile"],
+    filters: [{ name: "JSON", extensions: ["json"] }],
+  });
+  const path = result.filePaths[0];
+  if (result.canceled || !path) return null;
+  const fs = window.require("fs") as { promises: { readFile(path: string, encoding: "utf8"): Promise<string> } };
+  return fs.promises.readFile(path, "utf8");
+}
+
+/** Opens the Files picker on iOS. The input must be in the document for `click()` to work. */
+function pickWithInput(): Promise<string | null> {
+  return new Promise((resolve, reject) => {
+    const input = document.body.createEl("input", { type: "file", attr: { accept: ".json,application/json" } });
+    input.style.display = "none";
+    input.addEventListener("cancel", () => {
+      input.remove();
+      resolve(null);
+    });
+    input.onchange = () => {
+      input.remove();
+      const file = input.files?.[0];
+      if (file) file.text().then(resolve, reject);
+      else resolve(null);
+    };
+    input.click();
+  });
+}
+
+declare global {
+  interface Window {
+    /** Node require, present only in Obsidian desktop. */
+    require(id: string): unknown;
   }
 }

@@ -44,9 +44,18 @@ export default class GDriveSyncPlugin extends Plugin {
       : null;
   }
 
+  /** Tokens belong to the client that issued them, so a different client signs out. */
+  async importClient(client: OAuthClient) {
+    if (client.clientId !== this.data.clientId && this.data.tokens) await this.signOut();
+    this.data.clientId = client.clientId;
+    this.data.clientSecret = client.clientSecret;
+    await this.save();
+    this.initTokenManager();
+  }
+
   async signIn() {
     if (!this.data.clientId || !this.data.clientSecret) {
-      new Notice("Enter your OAuth client ID and secret in the plugin settings first.");
+      new Notice("Import your OAuth client JSON in the plugin settings first.");
       return;
     }
     const { url, pending } = await startAuth(this.client);

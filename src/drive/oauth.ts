@@ -1,7 +1,7 @@
 import { HttpError, type Http } from "./http";
 
 export const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
-export const REDIRECT_URI = "https://namtx.github.io/obsidian-gdrive-sync/oauth.html";
+export const REDIRECT_URI = "https://namtx.dev/obsidian-gdrive-sync/oauth.html";
 /** The redirect page forwards to `obsidian://<PROTOCOL_ACTION>?code=…&state=…`. */
 export const PROTOCOL_ACTION = "gdrive-sync-auth";
 
@@ -12,6 +12,29 @@ const REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke";
 export interface OAuthClient {
   clientId: string;
   clientSecret: string;
+}
+
+/**
+ * Parse the client JSON downloaded from Google Cloud Console
+ * (`{"web": {...}}`, or `{"installed": {...}}` for a Desktop client).
+ */
+export function parseClientJson(text: string): OAuthClient {
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error("Not a JSON file. Download the client JSON from Google Cloud Console → Clients.");
+  }
+  const root = json as { web?: unknown; installed?: unknown };
+  if (root?.installed && !root.web)
+    throw new Error("This is a Desktop client. Create a Web application client instead.");
+  const web = root?.web as { client_id?: unknown; client_secret?: unknown; redirect_uris?: unknown } | undefined;
+  if (typeof web?.client_id !== "string" || typeof web.client_secret !== "string" || !web.client_secret)
+    throw new Error("The file has no client ID and secret. Download it again from Google Cloud Console → Clients.");
+  const redirects = Array.isArray(web.redirect_uris) ? web.redirect_uris : [];
+  if (!redirects.includes(REDIRECT_URI))
+    throw new Error(`Add ${REDIRECT_URI} as an authorized redirect URI on the client, then download the JSON again.`);
+  return { clientId: web.client_id, clientSecret: web.client_secret };
 }
 
 /** Kept until the browser comes back, so it survives Obsidian being suspended on iOS. */

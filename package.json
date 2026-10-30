@@ -1,0 +1,28 @@
+{
+  "name": "obsidian-gdrive-sync",
+  "version": "0.1.0",
+  "description": "Sync an Obsidian vault across devices through Google Drive.",
+  "main": "main.js",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc --noEmit && node esbuild.config.mjs production",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "builtin-modules": "^5.0.0",
+    "esbuild": "^0.28.0",
+    "obsidian": "^1.14.0",
+    "tslib": "^2.8.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.0.0"
+  },
+  "dependencies": {
+    "node-diff3": "^3.2.1"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "id": "gdrive-sync",
+  "name": "Google Drive Sync",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "Sync this vault across devices through a folder in your Google Drive.",
+  "author": "namtx",
+  "isDesktopOnly": false
+}

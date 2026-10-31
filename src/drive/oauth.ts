@@ -89,6 +89,22 @@ export async function startAuth(client: OAuthClient, now = Date.now()): Promise<
   return { url: `${AUTH_ENDPOINT}?${params}`, pending: { verifier, state, createdAt: now } };
 }
 
+/**
+ * Read the response from a sign-in link pasted by hand, for systems where the
+ * `obsidian://` link does not open the app (Linux without a protocol handler).
+ * Accepts the `obsidian://…` link, the redirect page URL, or a bare query string.
+ */
+export function parseAuthLink(text: string): Record<string, string> {
+  const trimmed = text.trim();
+  const query = new URLSearchParams(trimmed.includes("?") ? trimmed.slice(trimmed.indexOf("?") + 1) : trimmed);
+  const out: Record<string, string> = {};
+  for (const key of ["code", "state", "error"]) {
+    const value = query.get(key);
+    if (value) out[key] = value;
+  }
+  return out;
+}
+
 /** Validate the redirect and exchange the code for tokens. */
 export async function finishAuth(
   http: Http,

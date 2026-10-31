@@ -15,7 +15,7 @@ The plugin signs in with your own Google Cloud OAuth client. Do this once; every
 
 ## Why a redirect page
 
-Google does not accept `obsidian://` as a redirect URI: Web clients need `https://`, and Desktop clients need a loopback server, which iOS can't run. Google redirects to `docs/oauth.html` (served by GitHub Pages), which immediately forwards `code` and `state` to `obsidian://gdrive-sync-auth`. The page stores and sends nothing. The code alone is useless: the token exchange also needs the PKCE verifier, which never leaves the device, and the client secret.
+Google does not accept `obsidian://` as a redirect URI: Web clients need `https://`, and Desktop clients need a loopback server, which iOS can't run. Google redirects to `docs/oauth.html` (served by GitHub Pages), which immediately forwards `code` and `state` to `obsidian://gdrive-sync-auth`. The page stores and sends nothing. Where the browser can't open `obsidian://` links (Linux, notably the AppImage, which registers no handler), the page also shows the link with a Copy button; paste it into **Paste sign-in link** in the plugin settings, which appears while a sign-in is in progress. The code alone is useless: the token exchange also needs the PKCE verifier, which never leaves the device, and the client secret.
 
 GitHub Pages: repository `namtx/obsidian-gdrive-sync`, **Settings → Pages → Deploy from a branch → `main` / `/docs`**.
 

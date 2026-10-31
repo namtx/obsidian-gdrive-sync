@@ -3,6 +3,7 @@ import type { HttpRequest, HttpResponse } from "../src/drive/http";
 import {
   AuthExpiredError,
   finishAuth,
+  parseAuthLink,
   parseClientJson,
   REDIRECT_URI,
   startAuth,
@@ -73,6 +74,22 @@ describe("parseClientJson", () => {
     expect(() => parseClientJson(JSON.stringify({ installed: web }))).toThrow(/Desktop client/);
     expect(() => parseClientJson(JSON.stringify({ web: { client_id: "x" } }))).toThrow(/no client ID and secret/);
     expect(() => parseClientJson(JSON.stringify({ web: { ...web, redirect_uris: [] } }))).toThrow(REDIRECT_URI);
+  });
+});
+
+describe("parseAuthLink", () => {
+  it("reads code and state from the obsidian link, the page URL or a bare query", () => {
+    const expected = { code: "4/abc", state: "s1" };
+    expect(parseAuthLink("  obsidian://gdrive-sync-auth?code=4%2Fabc&state=s1\n")).toEqual(expected);
+    expect(parseAuthLink(`${REDIRECT_URI}?state=s1&code=4%2Fabc&scope=x`)).toEqual(expected);
+    expect(parseAuthLink("code=4%2Fabc&state=s1")).toEqual(expected);
+  });
+  it("keeps an error and ignores text with no response", () => {
+    expect(parseAuthLink("obsidian://gdrive-sync-auth?error=access_denied&state=s1")).toEqual({
+      error: "access_denied",
+      state: "s1",
+    });
+    expect(parseAuthLink("hello")).toEqual({});
   });
 });
 

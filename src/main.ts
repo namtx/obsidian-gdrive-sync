@@ -216,10 +216,13 @@ export default class GDriveSyncPlugin extends Plugin {
     const { url, pending } = await startAuth(this.client);
     this.data.pendingAuth = pending;
     await this.save();
+    // Shows the paste field for systems where the obsidian:// link does not come back.
+    this.settingsTab.display();
     window.open(url);
   }
 
-  private async completeSignIn(params: Record<string, string>) {
+  /** Called by the obsidian:// handler, or with a sign-in link pasted in the settings. */
+  async completeSignIn(params: Record<string, string>) {
     try {
       const tokens = await finishAuth(obsidianHttp, this.client, this.data.pendingAuth, params);
       this.data.tokens = tokens;

@@ -1,7 +1,7 @@
 import { App, Notice, Platform, PluginSettingTab, Setting } from "obsidian";
 import type { RenameEvent } from "../core/renames";
 import { NO_CONFIG_SYNC, type ConfigSync } from "./scope";
-import { parseClientJson, type PendingAuth, type Tokens } from "../drive/oauth";
+import { parseAuthLink, parseClientJson, type PendingAuth, type Tokens } from "../drive/oauth";
 import type GDriveSyncPlugin from "../main";
 
 /** Everything in the plugin's data.json. Never synced: it holds this device's tokens. */
@@ -81,6 +81,29 @@ export class SettingsTab extends PluginSettingTab {
               .setCta()
               .onClick(() => this.plugin.signIn()),
       );
+
+    if (!signedIn && data.pendingAuth) {
+      let link = "";
+      new Setting(containerEl)
+        .setName("Paste sign-in link")
+        .setDesc(
+          "If the browser could not open Obsidian (common on Linux), copy the link shown on the sign-in page and paste it here.",
+        )
+        .addText((text) => text.setPlaceholder("obsidian://gdrive-sync-auth?…").onChange((v) => (link = v)))
+        .addButton((button) =>
+          button
+            .setButtonText("Finish sign-in")
+            .setCta()
+            .onClick(async () => {
+              const params = parseAuthLink(link);
+              if (!params.state) {
+                new Notice("That is not a sign-in link. Copy the whole link from the sign-in page.");
+                return;
+              }
+              await this.plugin.completeSignIn(params);
+            }),
+        );
+    }
 
     new Setting(containerEl).setName("Sync").setHeading();
 

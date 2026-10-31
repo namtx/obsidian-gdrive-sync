@@ -14,6 +14,11 @@
   a.button { display: inline-block; margin-top: 16px; padding: 12px 20px; border-radius: 10px;
              background: var(--accent); color: #fff; text-decoration: none; font-weight: 600; }
   p.muted { color: var(--muted); font-size: 14px; }
+  #manual { margin-top: 32px; }
+  #link { box-sizing: border-box; width: 100%; padding: 8px; border-radius: 8px; font: 12px/1.4 ui-monospace, monospace;
+          color: var(--fg); background: transparent; border: 1px solid var(--muted); resize: none; word-break: break-all; }
+  #copy { margin-top: 8px; padding: 8px 16px; border-radius: 8px; border: 1px solid var(--accent);
+          background: transparent; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -21,6 +26,12 @@
   <h1 id="title">Returning to Obsidian…</h1>
   <p id="message">If Obsidian does not open, tap the button.</p>
   <a class="button" id="open" href="#">Open Obsidian</a>
+  <div id="manual" hidden>
+    <p class="muted">Obsidian did not open? Copy this link, then paste it in the plugin settings under
+      <b>Paste sign-in link</b>. It expires in 10 minutes.</p>
+    <textarea id="link" readonly rows="4"></textarea>
+    <button id="copy" type="button">Copy link</button>
+  </div>
   <p class="muted">This page only forwards the sign-in response to the Obsidian app. It stores and sends nothing.</p>
 </main>
 <script>
@@ -42,6 +53,16 @@
   } else {
     if (params.get("error")) document.getElementById("title").textContent = "Sign-in was cancelled";
     document.getElementById("open").href = target;
+    // For systems with no obsidian:// handler (often Linux): paste the link into the plugin settings.
+    var link = document.getElementById("link");
+    link.value = target;
+    document.getElementById("manual").hidden = false;
+    document.getElementById("copy").addEventListener("click", function () {
+      var button = this;
+      var done = function () { button.textContent = "Copied"; };
+      if (navigator.clipboard) navigator.clipboard.writeText(target).then(done, function () { link.select(); });
+      else { link.select(); document.execCommand("copy"); done(); }
+    });
     window.location.href = target;
   }
 </script>
